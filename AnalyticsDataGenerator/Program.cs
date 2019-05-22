@@ -8,103 +8,198 @@ namespace db_connect
 {
     class Program
     {
+        const int StartingBuildPipelineSK = 123;
         const int StartingProjectSK = 1234;
         const int StartingBranchSK = 123456;
 
+        const int NumberOfBranches = 2;
+        const int DaysToGenerateDataFor = 1;
+        const int NumberOfBuidsPerDay = 2;
+        const int NumberOfFilesRenamedPerBuild = 5;
+
+        static int numberOfFilesLimit = 10;
+
+        static Random RandomNumberGenerator = new Random();
+
         static void Main(string[] args)
         {
-            var sqlFormattedDate = 20190301;
-
             var files = Directory.EnumerateFiles(@"C:\VSO\src", "*.*", SearchOption.AllDirectories)
                 .Where(file => new string[] { ".cs", ".tsx", ".ts" }
                 .Contains(Path.GetExtension(file)))
                 .Select(file => file.Remove(0, @"C:\VSO\".Length).Replace('\\', '/'))
                 .ToList();
 
-            Dictionary<string, long> durableSK = new Dictionary<string, long>();
-
-            long fileSK = 0;
-
-            foreach (var file in files)
+            if (numberOfFilesLimit != -1)
             {
-                durableSK.Add(file, fileSK++);
+                files = files.Take(numberOfFilesLimit).ToList();
             }
 
-            using (var fileStream = new StreamWriter(@"C:\AnalyticsPlayground\AzDevopsFilesMultipleBranches6MonthAccurate4.csv"))
+            Dictionary <long, Dictionary<string, long>> durableSK = new Dictionary<long, Dictionary<string, long>>();
+            Dictionary<long, Dictionary<string, long>> lastKnownSk = new Dictionary<long, Dictionary<string, long>>();
+
+            long durableFileSK = 0;
+
+            for (int currentBranchIndex = 0; currentBranchIndex < 10; currentBranchIndex++)
             {
-                fileStream.WriteLine("FileSK, DurableFileKey, BranchSK, ProjectSK, FullPath, RowEffectiveDate, RowExpiryDate, CurrentRow");
-                fileStream.Flush();
-
-                fileSK = 0;
-
-                // First Insert All files for each active branch
-                for (int i = 0; i < 10; ++i)
+                durableSK[currentBranchIndex] = new Dictionary<string, long>();
+                lastKnownSk[currentBranchIndex] = new Dictionary<string, long>();
+                foreach (var file in files)
                 {
-                    foreach (var file in files)
-                    {
-                        var line = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
-                            fileSK++,
-                            durableSK[file],
-                            StartingBranchSK + i,
-                            StartingProjectSK,
-                            file,
-                            sqlFormattedDate,
-                            sqlFormattedDate + 1,
-                            "Expired");
-
-                        fileStream.WriteLine(line);
-                        fileStream.Flush();
-                    }
+                    durableSK[currentBranchIndex].Add(file, durableFileSK++);
                 }
+            }
 
-                for (int day = 0; day <= 250; ++day)
+            using (var factFileStream = new StreamWriter(Path.Combine(Directory.GetCurrentDirectory(), $"Fact{DateTime.Now.ToString("yyyyMMdd-hhmmss")}.csv")))
+            {
+                factFileStream.WriteLine("FileSK, BranchSK, ProjectSK, BuildPipelineSK, DateSK, BuildId, TotalLines, CoveredLines");
+                var currentBuildId = 0;
+
+                using (var dimensionFileStream = new StreamWriter(Path.Combine(Directory.GetCurrentDirectory(), $"FileDimension{DateTime.Now.ToString("yyyyMMdd-hhmmss")}.csv")))
                 {
-                    for (int build = 0; build <= 50; ++build)
+                    dimensionFileStream.WriteLine("FileSK, DurableFileKey, BranchSK, ProjectSK, FullPath, RowEffectiveDate, RowExpiryDate, CurrentRow");
+                    dimensionFileStream.Flush();
+
+                    var currentfileSK = 0;
+                    var startingDate = DateTime.Parse("2019-01-01");
+
+                    // First Insert All files for each active branch
+                    for (int currentBranchIndex = 0; currentBranchIndex < 10; currentBranchIndex++)
                     {
-                        for (int branch = 0; branch < 10; ++branch)
+                        currentBuildId++;
+
+                        foreach (var file in files)
                         {
-                            var randomSkip = new Random().Next(1, 90000);
-                            var randomTake = 100;  
+                            lastKnownSk[currentBranchIndex][file] = currentfileSK;
 
-                            var resultSet = files.Skip(randomSkip).Take(randomTake);
+                            var dimLine = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                currentfileSK,
+                                durableSK[currentBranchIndex][file],
+                                StartingBranchSK + currentBranchIndex,
+                                StartingProjectSK,
+                                file,
+                                startingDate.ToString("yyyyMMdd"),
+                                startingDate.AddDays(1).ToString("yyyyMMdd"),
+                                "Expired");
 
-                            foreach (var file in resultSet)
+                            dimensionFileStream.WriteLine(dimLine);
+                            dimensionFileStream.Flush();
+
+                            var totalLines = RandomNumberGenerator.Next(10, 200);
+                            var coveredLines = RandomNumberGenerator.Next(0, totalLines);
+
+                            var factLine = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                currentfileSK,
+                                StartingBranchSK + currentBranchIndex,
+                                StartingProjectSK,
+                                StartingBuildPipelineSK,
+                                startingDate.ToString("yyyyMMdd"),
+                                currentBuildId,
+                                totalLines,
+                                coveredLines);
+
+                            factFileStream.WriteLine(factLine);
+                            factFileStream.Flush();
+
+                            currentfileSK++;
+                        }
+                    }
+
+                    for (int currentDay = 1; currentDay <= DaysToGenerateDataFor; currentDay++)
+                    {
+                        for (int currentBranchIndex = 0; currentBranchIndex < 10; ++currentBranchIndex)
+                        {
+                            for (int buildIndex = 0; buildIndex <= NumberOfBuidsPerDay; buildIndex++)
                             {
-                                var line = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
-                                    fileSK++,
-                                    durableSK[file],
-                                    branch % 2 == 0 ? StartingBranchSK : StartingBranchSK + branch,
-                                    StartingProjectSK,
-                                    file + day + build + branch,
-                                    sqlFormattedDate + day % 29 + (day/29) * 100,
-                                    sqlFormattedDate + day % 29 + (day / 29) * 100 + 1,
-                                    "Expired");
+                                currentBuildId++;
 
-                                fileStream.WriteLine(line);
-                                fileStream.Flush();
+                                var randomSkip = RandomNumberGenerator.Next(0, files.Count - NumberOfFilesRenamedPerBuild);
+                                var randomTake = NumberOfFilesRenamedPerBuild;
+
+                                var resultSet = files.Skip(randomSkip).Take(randomTake);
+
+                                foreach (var file in resultSet)
+                                {
+                                    lastKnownSk[currentBranchIndex][file] = currentfileSK;
+
+                                    var line = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                        currentfileSK,
+                                        durableSK[currentBranchIndex][file],
+                                        StartingBranchSK + currentBranchIndex,
+                                        StartingProjectSK,
+                                        file + "*" + startingDate.AddDays(currentDay).ToString("yyyyMMdd") + "-" + buildIndex,
+                                        startingDate.AddDays(currentDay).ToString("yyyyMMdd"),
+                                        startingDate.AddDays(currentDay + 1).ToString("yyyyMMdd"),
+                                        "Expired");
+
+                                    dimensionFileStream.WriteLine(line);
+                                    dimensionFileStream.Flush();
+
+                                    var totalLines = RandomNumberGenerator.Next(10, 200);
+                                    var coveredLines = RandomNumberGenerator.Next(0, totalLines);
+
+                                    var factLine = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                        currentfileSK,
+                                        StartingBranchSK + currentBranchIndex,
+                                        StartingProjectSK,
+                                        StartingBuildPipelineSK,
+                                        startingDate.AddDays(currentDay).ToString("yyyyMMdd"),
+                                        currentBuildId,
+                                        totalLines,
+                                        coveredLines);
+
+                                    factFileStream.WriteLine(factLine);
+                                    factFileStream.Flush();
+
+                                    currentfileSK++;
+                                }
+
+                                foreach (var file in files)
+                                {
+                                    if (resultSet.Contains(file))
+                                    {
+                                        continue;
+                                    }
+
+                                    var totalLines = RandomNumberGenerator.Next(10, 200);
+                                    var coveredLines = RandomNumberGenerator.Next(0, totalLines);
+
+                                    var factLine = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                        lastKnownSk[currentBranchIndex][file],
+                                        StartingBranchSK + currentBranchIndex,
+                                        StartingProjectSK,
+                                        StartingBuildPipelineSK,
+                                        startingDate.ToString("yyyyMMdd"),
+                                        currentBuildId,
+                                        totalLines,
+                                        coveredLines);
+
+                                    factFileStream.WriteLine(factLine);
+                                    factFileStream.Flush();
+                                }
                             }
                         }
                     }
+
+                    //for (int i = 0; i < 10; ++i)
+                    //{
+                    //    foreach (var file in files)
+                    //    {
+                    //        var line = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                    //            fileSK++,
+                    //            durableSK[file],
+                    //            StartingBranchSK + i,
+                    //            StartingProjectSK,
+                    //            file,
+                    //            sqlFormattedDate + 181,
+                    //            99991231,
+                    //            "Current");
+
+                    //        fileStream.WriteLine(line);
+                    //        fileStream.Flush();
+                    //    }
+                    //}
+                    //}
                 }
-
-                //for (int i = 0; i < 10; ++i)
-                //{
-                //    foreach (var file in files)
-                //    {
-                //        var line = string.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
-                //            fileSK++,
-                //            durableSK[file],
-                //            StartingBranchSK + i,
-                //            StartingProjectSK,
-                //            file,
-                //            sqlFormattedDate + 181,
-                //            99991231,
-                //            "Current");
-
-                //        fileStream.WriteLine(line);
-                //        fileStream.Flush();
-                //    }
-                //}
             }
         }
     }
