@@ -12,12 +12,12 @@ namespace db_connect
         const int StartingProjectSK = 1234;
         const int StartingBranchSK = 123456;
 
-        const int NumberOfBranches = 2;
-        const int DaysToGenerateDataFor = 1;
-        const int NumberOfBuidsPerDay = 2;
-        const int NumberOfFilesRenamedPerBuild = 5;
+        const int NumberOfBranches = 3;
+        const int DaysToGenerateDataFor = 30;
+        const int NumberOfBuidsPerDay = 30;
+        const int NumberOfFilesRenamedPerBuild = 10;
 
-        static int numberOfFilesLimit = 10;
+        static int numberOfFilesLimit = -1;
 
         static Random RandomNumberGenerator = new Random();
 
@@ -39,7 +39,7 @@ namespace db_connect
 
             long durableFileSK = 0;
 
-            for (int currentBranchIndex = 0; currentBranchIndex < 10; currentBranchIndex++)
+            for (int currentBranchIndex = 0; currentBranchIndex < NumberOfBranches; currentBranchIndex++)
             {
                 durableSK[currentBranchIndex] = new Dictionary<string, long>();
                 lastKnownSk[currentBranchIndex] = new Dictionary<string, long>();
