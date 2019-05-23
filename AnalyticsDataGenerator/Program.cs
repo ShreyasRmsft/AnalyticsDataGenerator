@@ -63,7 +63,7 @@ namespace db_connect
                     var startingDate = DateTime.Parse("2019-01-01");
 
                     // First Insert All files for each active branch
-                    for (int currentBranchIndex = 0; currentBranchIndex < 10; currentBranchIndex++)
+                    for (int currentBranchIndex = 0; currentBranchIndex < NumberOfBranches; currentBranchIndex++)
                     {
                         currentBuildId++;
 
@@ -106,7 +106,7 @@ namespace db_connect
 
                     for (int currentDay = 1; currentDay <= DaysToGenerateDataFor; currentDay++)
                     {
-                        for (int currentBranchIndex = 0; currentBranchIndex < 10; ++currentBranchIndex)
+                        for (int currentBranchIndex = 0; currentBranchIndex < NumberOfBranches; ++currentBranchIndex)
                         {
                             for (int buildIndex = 0; buildIndex <= NumberOfBuidsPerDay; buildIndex++)
                             {
